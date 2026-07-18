@@ -1,0 +1,31 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - misspell
+    - unparam
+    - whitespace
+    # errcheck, revive, gocritic, gocyclo, errorlint, and copyloopvar are
+    # intentionally not enabled: the codebase carries pre-existing findings
+    # (notably ~48 errcheck and ~80 revive doc-comment nits) tracked in a
+    # follow-up issue. Enabling them now would fail the gate on otherwise-clean
+    # code; re-enable once that debt is resolved.
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

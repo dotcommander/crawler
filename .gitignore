@@ -1,0 +1,97 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Built binaries
+crawler
+/crawler
+crawler.exe
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+debug.log
+error.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary directories and files
+tmp/
+temp/
+storage/
+cache/
+.tmp/
+
+# Configuration files with sensitive data
+config.local.yml
+*.secret
+*.key
+*.pem
+
+# Test coverage
+coverage.txt
+coverage.html
+coverage.out
+
+# Development tools
+.aider*
+**/.claude/settings.local.json
+.task/
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Playwright browsers and cache
+playwright-*
+.playwright/
+
+# Local agent / tooling config (not published)
+CLAUDE.md
+repomix.config.json
+.repomixignore
+.work/
+docs/plans/

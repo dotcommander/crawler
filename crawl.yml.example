@@ -1,0 +1,39 @@
+# Example crawler configuration
+# Copy to crawl.yml and customize as needed
+
+# Basic crawling parameters
+depth: 3              # How many links deep to follow (default: 3)
+concurrency: 5        # Number of parallel workers (default: 5)
+delay: 1.0           # Seconds between requests (default: 1.0)
+maxRetries: 2        # Retry failed requests (default: 2)
+
+# Mobile crawling (uncomment to enable)
+# mobile: true        # Crawl as iPhone 14
+
+# Maximum pages to crawl (uncomment to limit)
+# maxPages: 100      # Stop after 100 pages
+
+# Custom user agent (uncomment to override)
+# userAgent: "MyBot/1.0"
+
+# Per-domain rate limiting
+domainDelays:
+  # Add slow domains here
+  # api.github.com: 2.0
+  # fragile-site.com: 5.0
+
+# URL patterns to skip (regex)
+ignorePatterns:
+  # - "\.pdf$"         # Skip PDF files
+  # - "/api/"          # Skip API endpoints
+  # - "\.(jpg|png|gif)$" # Skip images
+  # - "^https://external\.com" # Skip external domain
+
+# Custom HTTP headers
+headers:
+  # Authorization: "Bearer your-token-here"
+  # X-Custom-Header: "value"
+
+# Advanced Playwright options (forces browser mode)
+# waitStrategy: "networkidle"  # Wait for network idle
+# extraWaitTime: 1000         # Additional milliseconds to wait
