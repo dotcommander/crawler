@@ -71,6 +71,12 @@ func parseCommand(args []string, stderr io.Writer) (*commandTree, error) {
 		kong.Description("Fast and smart web crawler with JavaScript support. Use `crawler serve [directory]` to browse captured content."),
 		kong.Vars{"version": version},
 		kong.Writers(stderr, stderr),
+		kong.ConfigureHelp(kong.HelpOptions{
+			Compact:   true,
+			Tree:      true,
+			Summary:   true,
+			FlagsLast: true,
+		}),
 	)
 	if err != nil {
 		return nil, err
