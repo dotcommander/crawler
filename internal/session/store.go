@@ -6,7 +6,7 @@ import "io"
 type VisitedStore interface {
 	// MarkVisited atomically marks a URL as visited.
 	// Returns true if the URL was already visited.
-	MarkVisited(url string) (alreadyVisited bool)
+	MarkVisited(url string) (alreadyVisited bool, err error)
 
 	// RecordResult updates the status code for a previously visited URL.
 	RecordResult(url string, statusCode int) error

@@ -14,8 +14,12 @@ func TestMemoryStore(t *testing.T) {
 	s := NewMemoryStore()
 	defer s.Close()
 
-	assert.False(t, s.MarkVisited("https://example.com"))
-	assert.True(t, s.MarkVisited("https://example.com"))
+	alreadyVisited, err := s.MarkVisited("https://example.com")
+	assert.NoError(t, err)
+	assert.False(t, alreadyVisited)
+	alreadyVisited, err = s.MarkVisited("https://example.com")
+	assert.NoError(t, err)
+	assert.True(t, alreadyVisited)
 	assert.True(t, s.IsVisited("https://example.com"))
 	assert.False(t, s.IsVisited("https://other.com"))
 	assert.NoError(t, s.RecordResult("https://example.com", 200))
@@ -30,8 +34,12 @@ func TestSQLiteStore(t *testing.T) {
 		s, err := NewSQLiteStore(dir, "https://example.com/fresh", false)
 		require.NoError(t, err)
 
-		assert.False(t, s.MarkVisited("https://example.com/page1"))
-		assert.True(t, s.MarkVisited("https://example.com/page1"))
+		alreadyVisited, markErr := s.MarkVisited("https://example.com/page1")
+		assert.NoError(t, markErr)
+		assert.False(t, alreadyVisited)
+		alreadyVisited, markErr = s.MarkVisited("https://example.com/page1")
+		assert.NoError(t, markErr)
+		assert.True(t, alreadyVisited)
 		assert.True(t, s.IsVisited("https://example.com/page1"))
 		assert.False(t, s.IsVisited("https://example.com/page2"))
 
@@ -45,9 +53,11 @@ func TestSQLiteStore(t *testing.T) {
 
 		s1, err := NewSQLiteStore(resumeDir, "https://resume.com", false)
 		require.NoError(t, err)
-		s1.MarkVisited("https://resume.com/a")
+		_, err = s1.MarkVisited("https://resume.com/a")
+		require.NoError(t, err)
 		require.NoError(t, s1.RecordResult("https://resume.com/a", 200))
-		s1.MarkVisited("https://resume.com/b")
+		_, err = s1.MarkVisited("https://resume.com/b")
+		require.NoError(t, err)
 		require.NoError(t, s1.RecordResult("https://resume.com/b", 200))
 		require.NoError(t, s1.Close())
 
@@ -67,10 +77,12 @@ func TestSQLiteStore(t *testing.T) {
 		s1, err := NewSQLiteStore(partialDir, "https://partial.com", false)
 		require.NoError(t, err)
 		// done: marked + recorded
-		s1.MarkVisited("https://partial.com/done")
+		_, err = s1.MarkVisited("https://partial.com/done")
+		require.NoError(t, err)
 		require.NoError(t, s1.RecordResult("https://partial.com/done", 200))
 		// in-flight: marked but crawl killed before RecordResult
-		s1.MarkVisited("https://partial.com/inflight")
+		_, err = s1.MarkVisited("https://partial.com/inflight")
+		require.NoError(t, err)
 		require.NoError(t, s1.Close())
 
 		s2, err := NewSQLiteStore(partialDir, "https://partial.com", true)
@@ -89,7 +101,8 @@ func TestSQLiteStore(t *testing.T) {
 
 		s1, err := NewSQLiteStore(freshDir, "https://fresh.com", false)
 		require.NoError(t, err)
-		s1.MarkVisited("https://fresh.com/old")
+		_, err = s1.MarkVisited("https://fresh.com/old")
+		require.NoError(t, err)
 		require.NoError(t, s1.Close())
 
 		s2, err := NewSQLiteStore(freshDir, "https://fresh.com", false)
@@ -98,6 +111,18 @@ func TestSQLiteStore(t *testing.T) {
 
 		assert.False(t, s2.IsVisited("https://fresh.com/old"))
 	})
+}
+
+func TestSQLiteStoreMarkVisitedFailureDoesNotPoisonCache(t *testing.T) {
+	t.Parallel()
+	s, err := NewSQLiteStore(t.TempDir(), "https://example.com", false)
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+
+	alreadyVisited, err := s.MarkVisited("https://example.com/page")
+	require.Error(t, err)
+	assert.False(t, alreadyVisited)
+	assert.False(t, s.IsVisited("https://example.com/page"))
 }
 
 func TestGetSessionsDir(t *testing.T) {

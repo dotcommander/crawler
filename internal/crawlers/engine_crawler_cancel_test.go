@@ -2,14 +2,36 @@ package crawlers
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dotcommander/crawler/internal/config"
 	"github.com/dotcommander/crawler/internal/session"
+	"github.com/dotcommander/crawler/ui"
 )
 
 type testEngine struct{}
+
+type failingVisitedStore struct {
+	err error
+}
+
+func (s *failingVisitedStore) MarkVisited(string) (bool, error) { return false, s.err }
+func (s *failingVisitedStore) RecordResult(string, int) error   { return nil }
+func (s *failingVisitedStore) IsVisited(string) bool            { return false }
+func (s *failingVisitedStore) Close() error                     { return nil }
+
+type recordingReporter struct {
+	logs []string
+}
+
+func (r *recordingReporter) Log(level, message string) {
+	r.logs = append(r.logs, level+": "+message)
+}
+func (*recordingReporter) UpdateStats(ui.StatsMsg)          {}
+func (*recordingReporter) UpdateWorker(int, string, string) {}
 
 func (testEngine) CrawlPage(_ context.Context, item *QueueItem) (*CrawlResult, error) {
 	return &CrawlResult{
@@ -123,5 +145,32 @@ func TestNewEngineCrawler_TypedNilStoreFallsBackToMemory(t *testing.T) {
 
 	if _, ok := crawler.visited.(*session.MemoryStore); !ok {
 		t.Fatalf("visited store = %T, want *session.MemoryStore", crawler.visited)
+	}
+}
+
+func TestEngineCrawler_VisitPersistenceFailureIsReportedAndSkipped(t *testing.T) {
+	t.Parallel()
+	reporter := &recordingReporter{}
+	storeErr := errors.New("session database unavailable")
+	crawler, err := NewEngineCrawler(&config.CrawlerConfig{
+		StartURL:     "http://example.com",
+		OutputDir:    t.TempDir(),
+		Concurrency:  1,
+		DefaultDelay: 0,
+	}, reporter, "colly", &failingVisitedStore{err: storeErr})
+	if err != nil {
+		t.Fatalf("NewEngineCrawler: %v", err)
+	}
+	t.Cleanup(crawler.Close)
+
+	parsedURL, normalizedURL, skipped := crawler.validateAndCheckURL(0, "http://example.com/page")
+	if !skipped || parsedURL != nil || normalizedURL != "" {
+		t.Fatalf("validateAndCheckURL = (%v, %q, %v), want (nil, empty, true)", parsedURL, normalizedURL, skipped)
+	}
+	if got := crawler.stats.PagesFailed.Load(); got != 1 {
+		t.Fatalf("PagesFailed = %d, want 1", got)
+	}
+	if len(reporter.logs) != 1 || !strings.Contains(reporter.logs[0], storeErr.Error()) {
+		t.Fatalf("logs = %q, want persistence error", reporter.logs)
 	}
 }

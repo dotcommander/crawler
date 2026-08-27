@@ -11,9 +11,9 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{}
 }
 
-func (m *MemoryStore) MarkVisited(url string) bool {
+func (m *MemoryStore) MarkVisited(url string) (bool, error) {
 	_, loaded := m.visited.LoadOrStore(url, true)
-	return loaded
+	return loaded, nil
 }
 
 func (m *MemoryStore) RecordResult(_ string, _ int) error {

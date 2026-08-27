@@ -346,7 +346,13 @@ func (c *EngineCrawler) validateAndCheckURL(workerID int, urlStr string) (*url.U
 	normalizedURL := c.normalizeURL(urlStr)
 
 	// Check if already visited (using normalized URL)
-	if c.visited.MarkVisited(normalizedURL) {
+	alreadyVisited, err := c.visited.MarkVisited(normalizedURL)
+	if err != nil {
+		c.reporter.Log("ERROR", fmt.Sprintf("Failed to persist visit for %s: %v", urlStr, err))
+		c.stats.PagesFailed.Add(1)
+		return nil, "", true
+	}
+	if alreadyVisited {
 		c.reporter.UpdateWorker(workerID, "already visited", urlStr)
 		return nil, "", true
 	}

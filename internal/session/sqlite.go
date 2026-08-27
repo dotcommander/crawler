@@ -92,18 +92,21 @@ func NewSQLiteStore(sessionsDir, startURL string, resume bool) (*SQLiteStore, er
 	return s, nil
 }
 
-func (s *SQLiteStore) MarkVisited(url string) bool {
-	if _, loaded := s.visited.LoadOrStore(url, true); loaded {
-		return true
-	}
-
+func (s *SQLiteStore) MarkVisited(url string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, _ = s.db.Exec(
+	if _, loaded := s.visited.Load(url); loaded {
+		return true, nil
+	}
+
+	if _, err := s.db.Exec(
 		`INSERT OR IGNORE INTO visited (url, state, crawled_at) VALUES (?, 'in_flight', ?)`,
 		url, time.Now().UTC(),
-	)
-	return false
+	); err != nil {
+		return false, fmt.Errorf("mark visited %s: %w", url, err)
+	}
+	s.visited.Store(url, true)
+	return false, nil
 }
 
 func (s *SQLiteStore) RecordResult(url string, statusCode int) error {
