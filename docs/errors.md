@@ -31,20 +31,18 @@ chmod -R 755 ~/.config/crawler/
 
 **Prevention**: Ensure your user has write access to home directory
 
-## Error: "failed to launch browser: could not start playwright"
+## Error: headless crawl fails to launch a browser
 
-**Cause**: Playwright browsers not installed
+**Cause**: No Chromium available for katana's headless engine (it launches a
+browser on demand via go-rod)
 
 **Solution**:
 ```bash
-# Install Playwright browsers
-go run github.com/playwright-community/playwright-go/cmd/playwright@latest install
-
-# Or install specific browser
-go run github.com/playwright-community/playwright-go/cmd/playwright@latest install chromium
+# go-rod downloads a managed Chromium automatically on first headless run;
+# if that fails (offline, sandboxed CI), install Chrome and ensure it is on PATH
 ```
 
-**Prevention**: Add to your setup script or README
+**Prevention**: Pre-install Chrome in CI images that run headless crawls
 
 ## Error: Context timeout when crawling JavaScript-heavy sites
 
@@ -58,11 +56,11 @@ extraWaitTime: 5000  # 5 seconds extra wait
 waitStrategy: "networkidle"
 EOF
 
-# Or force Playwright engine
-./crawler --engine playwright https://spa-site.com
+# Or select the headless engine via mobile mode
+./crawler --mobile https://spa-site.com
 ```
 
-**Prevention**: Use appropriate engine for site type (Playwright for JS-heavy)
+**Prevention**: Use the headless engine for JavaScript-heavy sites
 
 ## Error: "too many open files"
 

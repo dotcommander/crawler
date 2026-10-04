@@ -1,14 +1,13 @@
 # Web Crawler (Go Version)
 
-A high-performance web crawler written in Go using Playwright for browser automation. Features mobile device emulation, concurrent crawling, and advanced page limits.
+A high-performance web crawler written in Go on top of the [katana](https://github.com/projectdiscovery/katana) engine, with automatic headless-Chromium fallback for JavaScript-heavy and mobile-emulated crawls. Features mobile device emulation, concurrent crawling, and advanced page limits.
 
 ## Features
 
 - 🚀 Concurrent crawling with configurable workers
-- 📱 Mobile device emulation (iPhone 14)
+- 📱 Mobile device emulation
 - 🎯 Max pages limit to control crawl scope
-- 🔄 Circuit breaker for failing domains
-- ⚡ Per-domain rate limiting
+- ⚡ Per-domain rate limiting (delay groups)
 - 💾 Persistent cache for visited URLs
 - 📊 Real-time progress reporting
 - 🎨 Enhanced UI with worker visualization

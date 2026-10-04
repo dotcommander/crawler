@@ -11,7 +11,7 @@ The simplest way to crawl a website:
 ```
 
 This will crawl `example.com` using default settings:
-- **Engine**: Colly (fast HTTP-based crawler)
+- **Engine**: katana standard (fast HTTP-based crawler)
 - **Depth**: 2 levels from the start URL
 - **Concurrency**: 5 workers
 - **Output**: `~/.config/crawler/storage/`
@@ -29,7 +29,7 @@ Limit the crawl to just the starting page:
 **Expected output:**
 ```
 ▌ Crawler starting...
-  Engine: colly
+  Engine: katana-standard
   Target: https://example.com
   Max pages: 1
 
@@ -51,7 +51,7 @@ See detailed progress information:
 
 **Expected output:**
 ```
-[INFO] Starting crawler with engine: colly
+[INFO] Starting crawler with engine: katana-standard
 [INFO] Start URL: https://example.com
 [INFO] Output directory: /Users/you/.config/crawler/storage
 [INFO] Concurrency: 5 workers
@@ -102,7 +102,7 @@ Adjust crawl behavior with common options:
 
 ### Mobile Emulation Crawl
 
-Crawl as a mobile device (automatically selects Playwright engine):
+Crawl as a mobile device (automatically selects the headless engine):
 
 ```bash
 ./crawler --mobile --max-pages 5 https://example.com
@@ -111,7 +111,7 @@ Crawl as a mobile device (automatically selects Playwright engine):
 **Expected output:**
 ```
 ▌ Crawler starting...
-  Engine: playwright (auto-selected for mobile)
+  Engine: katana-headless (auto-selected for mobile)
   Device: iPhone 14
   Viewport: 390x844
 
@@ -121,12 +121,12 @@ Crawl as a mobile device (automatically selects Playwright engine):
 
 ## Engine Selection
 
-### Colly Engine (Default)
+### Standard Engine (Default)
 
 Fast HTTP-based crawling for static content:
 
 ```bash
-./crawler --engine colly https://example.com
+./crawler https://example.com
 ```
 
 **Best for:**
@@ -138,12 +138,13 @@ Fast HTTP-based crawling for static content:
 - JavaScript-rendered content
 - Sites requiring browser interaction
 
-### Playwright Engine
+### Headless Engine
 
 Full browser automation for dynamic content:
 
 ```bash
-./crawler --engine playwright https://spa-example.com
+# Trigger headless via mobile mode or a custom waitStrategy (config)
+./crawler --mobile https://spa-example.com
 ```
 
 **Best for:**
@@ -154,7 +155,7 @@ Full browser automation for dynamic content:
 **Expected output:**
 ```
 ▌ Crawler starting...
-  Engine: playwright
+  Engine: katana-headless
   Browser: headless chromium
 
 ▌ Crawling https://spa-example.com...
@@ -241,10 +242,10 @@ Limit the scope with `--max-pages`:
 
 ### JavaScript Not Rendering
 
-Switch to Playwright engine:
+Switch to the headless engine:
 
 ```bash
-./crawler --engine playwright https://spa-site.com
+./crawler --mobile https://spa-site.com
 ```
 
 ### Rate Limiting Issues

@@ -27,7 +27,7 @@ func TestParseCommand(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			tree, err := parseCommand(test.args, io.Discard)
+			tree, err := parseCommand(test.args, io.Discard, io.Discard)
 			if test.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 					t.Fatalf("error = %v, want containing %q", err, test.wantErr)

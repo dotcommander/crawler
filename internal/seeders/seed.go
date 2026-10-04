@@ -13,18 +13,22 @@ type SeedResult struct {
 	DisallowedCount int
 }
 
-// Seed fetches robots.txt and sitemaps for the given start URL, returning
+// Seed uses the caller-provided robots.txt result (fetching one itself
+// only when nil) together with sitemaps for the given start URL, returning
 // seed URLs filtered by domain boundaries and robots.txt rules.
-func Seed(ctx context.Context, startURL, userAgent string, excludePatterns []string, verbose bool) (*SeedResult, error) {
+func Seed(ctx context.Context, startURL, userAgent string, excludePatterns []string, robots *RobotsResult, verbose bool) (*SeedResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	robots, err := FetchRobotsTxt(ctx, startURL, verbose)
-	if err != nil {
-		if verbose {
-			log.Printf("[WARN] robots.txt fetch failed: %v", err)
+	if robots == nil {
+		fetched, err := FetchRobotsTxt(ctx, startURL, verbose)
+		if err != nil {
+			if verbose {
+				log.Printf("[WARN] robots.txt fetch failed: %v", err)
+			}
+			fetched = &RobotsResult{}
 		}
-		robots = &RobotsResult{}
+		robots = fetched
 	}
 
 	sitemapURLs, err := FetchSitemapURLs(ctx, startURL, robots.SitemapURLs, excludePatterns, verbose)

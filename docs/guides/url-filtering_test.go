@@ -109,19 +109,18 @@ func TestURLFilteringGuide_SameDomainBehavior(t *testing.T) {
 		{
 			name: "Implementation reference",
 			mustExist: []string{
-				"Location: `internal/crawlers/engine_crawler.go:356-359`",
-				"u.Host != startURL.Host",
+				"Location: `internal/katanaengine/translate.go` (`ScopeRegexes`)",
+				"IsWithinBasePath",
 			},
 			reason: "Should reference the domain checking implementation",
 		},
 		{
-			name: "Code example with URL.Host comparison",
+			name: "Code example with scope anchor construction",
 			mustExist: []string{
 				"```go",
-				"if u.Host != \"\" && u.Host != startURL.Host {",
-				"return true",
+				"regexp.QuoteMeta(u.Scheme+\"://\"+u.Host)",
 			},
-			reason: "Should show Go code for domain validation",
+			reason: "Should show Go code for the same-host scope anchor",
 		},
 		{
 			name: "Practical examples with crawled vs skipped",
@@ -734,7 +733,7 @@ func TestURLFilteringGuide_References(t *testing.T) {
 		{
 			name: "Implementation file references",
 			mustExist: []string{
-				"**URL Filtering Implementation**: `internal/crawlers/engine_crawler.go:338-371`",
+				"**Scope Translation (same-domain + base path)**: `internal/katanaengine/translate.go`",
 				"**Path Validation**: `internal/utils/url.go:141-164`",
 				"**Pattern Matching**: `internal/utils/url.go:251-264`",
 				"**Normalization**: `internal/utils/url.go:266-284`",
@@ -891,7 +890,7 @@ func TestURLFilteringGuide_AllFilteringLayersCovered(t *testing.T) {
 		{
 			layer:    "Domain Restriction",
 			section:  "### 1. Domain Restriction",
-			implRef:  "engine_crawler.go",
+			implRef:  "translate.go",
 			examples: true,
 		},
 		{

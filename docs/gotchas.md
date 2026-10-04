@@ -39,9 +39,9 @@ Crawling /files/?C=M;O=A  (same content, sorted by modified asc)
 
 **The Fix**: Already implemented - crawler filters these, but you'll still see them in logs.
 
-## Colly Engine Doesn't Execute JavaScript
+## Standard Engine Doesn't Execute JavaScript
 
-**The Gotcha**: The default Colly engine is fast but can't see JavaScript-rendered content.
+**The Gotcha**: The default katana HTTP engine is fast but can't see JavaScript-rendered content.
 
 **Why It's Surprising**: Modern sites often load content dynamically, so you get empty pages.
 
@@ -52,13 +52,13 @@ Crawling /files/?C=M;O=A  (same content, sorted by modified asc)
 
 **Solution**:
 ```bash
-# Force Playwright engine for JS sites
-./crawler --engine playwright https://react-app.com
-
-# Or set in config for specific scenarios
-# Mobile mode auto-selects Playwright
+# Trigger the headless engine for JS sites via a custom wait strategy
+# (config: waitStrategy: domcontentloaded) or mobile mode
 ./crawler --mobile https://example.com
 ```
+
+The engine switches to headless automatically when `mobile` is on, a custom
+`waitStrategy` is set, or `extraWaitTime` exceeds 500ms.
 
 ## File Save Location Isn't Where You Run From
 

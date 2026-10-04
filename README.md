@@ -5,21 +5,25 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/dotcommander/crawler.svg)](https://pkg.go.dev/github.com/dotcommander/crawler)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dotcommander/crawler)](https://goreportcard.com/report/github.com/dotcommander/crawler)
 
-A high-performance web crawler in Go with a dual-engine architecture that picks
-the fastest method that can render the page: plain HTTP ([Colly](https://github.com/gocolly/colly))
-for static content, and a real browser ([Rod](https://github.com/go-rod/rod)) for
-JavaScript-heavy or mobile-emulated sites.
+A high-performance web crawler in Go built on
+[projectdiscovery/katana](https://github.com/projectdiscovery/katana) used as an
+embedded engine: plain HTTP for static content, with an automatic switch to a
+headless Chromium for JavaScript-heavy or mobile-emulated sites.
 
 ## Features
 
-- **Dual engine, auto-selected** — Colly (HTTP) by default; Rod (browser) when you
-  request `--mobile`, a custom `waitStrategy`, or an `extraWaitTime > 500ms`.
+- **Katana engine, auto-selected mode** — katana's standard (HTTP) engine by
+  default; its headless Chromium engine when you request `--mobile`, a custom
+  `waitStrategy`, or an `extraWaitTime > 500ms`.
 - **Scope-safe crawling** — stays within the seed's domain and base path; honours
   `robots.txt` and sitemap discovery by default (`--no-robots` to opt out).
-- **Polite by construction** — per-domain rate limiting, a per-domain circuit
-  breaker, semaphore-bounded workers, and bounded response bodies.
+- **Polite by construction** — per-domain rate limiting via delay groups,
+  semaphore-bounded workers, and bounded response bodies.
 - **Resumable** — visited-URL state persists to SQLite under
-  `~/.config/crawler/sessions/`; re-run with `--resume` to continue.
+  `~/.config/crawler/sessions/`; re-run with `--resume` to continue. Resume
+  re-traverses from the seed: already-completed pages are re-fetched but
+  deduplicated from exports and saved files (the engine's queue state is not
+  persisted).
 - **Structured export** — `--format jsonl|csv|sitemap` with `--extract` CSS
   selectors (e.g. `title=h1,desc=.summary`) emitted as columns/fields.
 - **JavaScript endpoint mining** — `--jc` extracts API endpoints from inline and
@@ -31,8 +35,9 @@ JavaScript-heavy or mobile-emulated sites.
 
 ## Requirements
 
-- Go 1.25 or later.
-- For browser (Rod) crawls: a Chromium is launched on demand (headless).
+- Go 1.26 or later.
+- For headless crawls: a Chromium is launched on demand (managed by katana's
+  headless engine).
 
 ## Install
 
@@ -51,13 +56,13 @@ go build -o crawler .
 ## Quick start
 
 ```bash
-# Crawl with smart defaults (Colly, in-scope)
+# Crawl with smart defaults (katana HTTP engine, in-scope)
 crawler https://example.com
 
 # Cap a large site
 crawler --max-pages 50 https://docs.example.com
 
-# Mobile rendering (auto-selects the Rod browser engine)
+# Mobile rendering (auto-selects the headless engine)
 crawler --mobile https://m.example.com
 
 # Pipeline mode: JSONL records to stdout, no UI
@@ -77,8 +82,8 @@ crawler serve [directory]   # browse captured content
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--output` | `-o` | Directory to save crawled content |
-| `--max-pages` | `-p` | Stop after N pages (`0` = unlimited) |
-| `--mobile` | `-m` | Crawl as a mobile device (selects Rod) |
+| `--max-pages` | `-p` | Stop after N pages, best effort (`0` = unlimited; in-flight requests may slightly overshoot) |
+| `--mobile` | `-m` | Crawl as a mobile device (selects headless) |
 | `--config` | `-c` | Path to a YAML config file |
 | `--profile` | | Preset: `fast`, `safe`, or `thorough` |
 | `--url-list` | | File of newline-delimited seed URLs |
@@ -133,15 +138,20 @@ log output or `--quiet` for JSONL.
 
 ### Engine selection
 
-| Option | Engine | Why |
-|--------|--------|-----|
-| (default) | **Colly** | Fast HTTP; no JavaScript |
-| `--mobile` | **Rod** | Device emulation needs a browser |
-| `waitStrategy` ≠ `networkidle` | **Rod** | Custom load timing |
-| `extraWaitTime > 500ms` | **Rod** | Indicates a JS-heavy page |
+Crawling is powered by [katana](https://github.com/projectdiscovery/katana)
+(v1.7.0, used as a Go library via `internal/katanaengine`):
 
-A [Playwright](https://github.com/playwright-community/playwright-go) engine is
-also implemented in `internal/crawlers/`; the auto-selector uses Colly or Rod.
+| Option | Mode | Why |
+|--------|------|-----|
+| (default) | **katana standard** | Fast HTTP; no JavaScript |
+| `--mobile` | **katana headless** | Device emulation needs a browser |
+| `waitStrategy` ≠ `networkidle` | **katana headless** | Custom load timing |
+| `extraWaitTime > 500ms` | **katana headless** | Indicates a JS-heavy page |
+
+The former Colly/Rod/Playwright engines and the in-house orchestration core
+were removed once the katana adapter reached parity (queueing, scope control,
+robots translation, and pacing are now katana's, adapted through
+`internal/katanaengine`).
 
 ### Layout
 
@@ -150,9 +160,11 @@ api/                     Public Crawler interface
 cmd/                     Kong CLI (root, serve) and config helpers
 internal/
   config/                Viper-based config + defaults
-  crawlers/              Engines, orchestration, page pool, rate limiter,
-                         circuit breaker, JS/HTML extractors
+  crawlers/              Crawler orchestration on the katana engine,
+                         export records, content saving, extraction
   exporters/             jsonl / csv / sitemap writers
+  katanaengine/          CrawlerConfig → katana Options translation,
+                         engine adapter, delay-group runner
   seeders/               robots.txt + sitemap discovery
   session/               Visited store (SQLite / memory) for resume
   utils/                 URL normalization, validation, path safety

@@ -8,7 +8,7 @@ echo "========================"
 # Test 1: Crawl a specific file path
 echo -e "\nTest 1: Crawling https://example.com/docs/guide.html"
 echo "Should only crawl within /docs/ directory"
-./crawler --verbose --max-pages 5 --engine colly https://example.com/docs/guide.html 2>&1 | grep -E "(Crawled:|Skipping:|mailto:|external)"
+./crawler --verbose --max-pages 5 https://example.com/docs/guide.html 2>&1 | grep -E "(Crawled:|Skipping:|mailto:|external)"
 
 # Test 2: Check mailto filtering
 echo -e "\nTest 2: Creating test HTML with various link types"

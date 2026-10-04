@@ -7,7 +7,6 @@ import (
 
 	"github.com/dotcommander/crawler/api"
 	"github.com/dotcommander/crawler/internal/config"
-	"github.com/dotcommander/crawler/internal/exporters"
 	"github.com/dotcommander/crawler/internal/session"
 	"github.com/dotcommander/crawler/ui"
 
@@ -15,18 +14,21 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-// CreateCrawler creates a crawler instance based on the configuration, UI preference, and engine type
-func CreateCrawler(cfg *config.CrawlerConfig, useVerboseMode bool, engineType string, store session.VisitedStore) (api.Crawler, error) {
+// CreateCrawler creates a crawler instance based on the configuration
+// and UI preference. All crawling runs on the katana engine adapter;
+// the standard HTTP engine is used unless the configuration requires a
+// browser (mobile, wait strategies, long extra waits).
+func CreateCrawler(cfg *config.CrawlerConfig, useVerboseMode bool, store session.VisitedStore) (api.Crawler, error) {
 	var mode ui.UIMode
 
 	if cfg.Quiet {
-		return NewEngineCrawler(cfg, &NoOpReporter{}, engineType, store)
+		return NewKatanaCrawler(cfg, &NoOpReporter{}, store)
 	}
 
 	// Verbose or no TTY: plain log output (no ANSI/alt-screen corruption in piped/CI).
 	noTTY := !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())
 	if useVerboseMode || noTTY {
-		return NewEngineCrawler(cfg, &LogReporter{}, engineType, store)
+		return NewKatanaCrawler(cfg, &LogReporter{}, store)
 	}
 
 	// Determine UI mode
@@ -43,11 +45,11 @@ func CreateCrawler(cfg *config.CrawlerConfig, useVerboseMode bool, engineType st
 
 	if !unifiedUI.IsBubbletea() {
 		// Simple mode doesn't use Bubbletea
-		return NewCrawlerWithSimpleUI(cfg, unifiedUI, engineType, store)
+		return NewCrawlerWithSimpleUI(cfg, unifiedUI, store)
 	}
 
 	// Standard and Enhanced modes use Bubbletea
-	return NewCrawlerWithBubbletea(cfg, unifiedUI, engineType, store)
+	return NewCrawlerWithBubbletea(cfg, unifiedUI, store)
 }
 
 // CrawlerWithUI wraps a crawler with a UI implementation
@@ -58,43 +60,33 @@ type CrawlerWithUI struct {
 }
 
 // NewCrawlerWithSimpleUI creates a crawler with simple terminal UI
-func NewCrawlerWithSimpleUI(config *config.CrawlerConfig, uiImpl ui.UI, engineType string, store session.VisitedStore) (*CrawlerWithUI, error) {
+func NewCrawlerWithSimpleUI(config *config.CrawlerConfig, uiImpl ui.UI, store session.VisitedStore) (*CrawlerWithUI, error) {
 	reporter := &UnifiedUIReporter{ui: uiImpl, simpleMode: true}
-	crawler, err := NewEngineCrawler(config, reporter, engineType, store)
+	crawler, err := NewKatanaCrawler(config, reporter, store)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create engine crawler with simple UI: %w", err)
+		return nil, fmt.Errorf("failed to create crawler with simple UI: %w", err)
 	}
 
 	return &CrawlerWithUI{
-		Crawler: &crawlerAdapter{crawler},
+		Crawler: crawler,
 		uiImpl:  uiImpl,
 	}, nil
 }
 
 // NewCrawlerWithBubbletea creates a crawler with Bubbletea UI
-func NewCrawlerWithBubbletea(config *config.CrawlerConfig, uiImpl ui.UI, engineType string, store session.VisitedStore) (*CrawlerWithUI, error) {
+func NewCrawlerWithBubbletea(config *config.CrawlerConfig, uiImpl ui.UI, store session.VisitedStore) (*CrawlerWithUI, error) {
 	program := tea.NewProgram(uiImpl)
 	reporter := &UnifiedUIReporter{ui: uiImpl, program: program}
-	crawler, err := NewEngineCrawler(config, reporter, engineType, store)
+	crawler, err := NewKatanaCrawler(config, reporter, store)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create engine crawler with Bubbletea UI: %w", err)
+		return nil, fmt.Errorf("failed to create crawler with Bubbletea UI: %w", err)
 	}
 
 	return &CrawlerWithUI{
-		Crawler: &crawlerAdapter{crawler},
+		Crawler: crawler,
 		uiImpl:  uiImpl,
 		program: program,
 	}, nil
-}
-
-// crawlerAdapter adapts EngineCrawler to the api.Crawler interface
-type crawlerAdapter struct {
-	*EngineCrawler
-}
-
-// SetExporter forwards to the embedded EngineCrawler
-func (a *crawlerAdapter) SetExporter(exp exporters.Exporter) {
-	a.EngineCrawler.SetExporter(exp)
 }
 
 // Start runs the crawler with UI
@@ -153,9 +145,7 @@ func (c *CrawlerWithUI) Start() error {
 
 	// Simple mode
 	c.uiImpl.PrintHeader()
-	err := c.Crawler.Start()
-
-	return err
+	return c.Crawler.Start()
 }
 
 // Cancel stops the crawler

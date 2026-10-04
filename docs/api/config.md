@@ -46,10 +46,11 @@ type CrawlerConfig struct {
 | `ExcludePatterns` | `[]string` | `[]` | — | — | `ignorePatterns` | URL patterns to exclude from crawling. Supports glob patterns. Examples: `"*.pdf"`, `"*logout*"`. |
 | `UserAgent` | `string` | `""` | `--user-agent` | `CRAWLER_USERAGENT` | `userAgent` | Custom User-Agent string for HTTP requests. Empty string uses engine default. |
 | `Headers` | `map[string]string` | `{}` | — | — | `headers` | Custom HTTP headers to include in all requests. Key-value pairs of header names and values. |
-| `Mobile` | `bool` | `false` | `--mobile` | `CRAWLER_MOBILE` | `mobile` | Enable mobile device emulation. When `true`, forces Playwright engine with iPhone 14 user agent. |
+| `Mobile` | `bool` | `false` | `--mobile` | `CRAWLER_MOBILE` | `mobile` | Enable mobile device emulation. When `true`, selects the headless engine with the mobile user agent. |
 | `MaxPages` | `int` | `0` | `--max-pages` | `CRAWLER_MAXPAGES` | `maxPages` | Maximum number of pages to crawl. `0` means unlimited. Stops crawler when limit is reached. |
-| `WaitStrategy` | `string` | `"networkidle"` | — | — | `waitStrategy` | Playwright wait strategy: `"commit"`, `"load"`, `"domcontentloaded"`, `"networkidle"`. Non-default values force Playwright engine. |
-| `ExtraWaitTime` | `time.Duration` | `500ms` | — | — | `extraWaitTime` | Additional wait time after page load completes. Values >500ms force Playwright engine. |
+| `EngineTimeoutSeconds` | `int` | `10` | — | `CRAWLER_ENGINETIMEOUTSECONDS` | `engineTimeoutSeconds` | Minimum seconds the katana engine keeps its crawl queue alive; small crawls are floored by this window. |
+| `WaitStrategy` | `string` | `"networkidle"` | — | — | `waitStrategy` | Page-load strategy: `"commit"`, `"load"`, `"domcontentloaded"`, `"networkidle"`. Non-default values select the headless engine. |
+| `ExtraWaitTime` | `time.Duration` | `500ms` | — | — | `extraWaitTime` | Additional wait time after page load completes. Values >500ms select the headless engine. |
 
 ## Configuration Precedence
 
@@ -109,7 +110,7 @@ func main() {
         DefaultDelay: 1 * time.Second,
     }
 
-    crawler, err := crawlers.CreateCrawler(cfg, true, "colly")
+    crawler, err := crawlers.CreateCrawler(cfg, verbose, store)
     if err != nil {
         log.Fatal(err)
     }
@@ -186,9 +187,9 @@ Certain configuration fields affect automatic engine selection:
 
 | Config | Effect |
 |--------|--------|
-| `Mobile: true` | Forces Playwright engine (iPhone 14 emulation) |
-| `WaitStrategy != "networkidle"` | Forces Playwright engine |
-| `ExtraWaitTime > 500ms` | Suggests Playwright for JavaScript-heavy sites |
+| `Mobile: true` | Selects the headless engine (mobile emulation) |
+| `WaitStrategy != "networkidle"` | Selects the headless engine |
+| `ExtraWaitTime > 500ms` | Selects the headless engine for JavaScript-heavy sites |
 
 ## XDG Base Directory Compliance
 
@@ -264,7 +265,7 @@ ignorePatterns:
   - "*logout*"
   - "*admin*"
 
-# Playwright settings
+# Headless engine settings
 waitStrategy: "networkidle"
 extraWaitTime: "500ms"
 

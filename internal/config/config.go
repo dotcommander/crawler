@@ -9,32 +9,33 @@ import (
 
 // CrawlerConfig represents the final configuration for the crawler
 type CrawlerConfig struct {
-	StartURL         string
-	StartURLs        []string // All seed URLs (includes StartURL); used for multi-URL crawling
-	OutputDir        string
-	CacheDir         string // Directory for cache files
-	MaxDepth         int
-	Concurrency      int
-	DefaultDelay     time.Duration
-	MaxRetries       int
-	Force            bool
-	DomainDelays     map[string]time.Duration
-	ExcludePatterns  []string
-	UserAgent        string
-	MobileUserAgent  string
-	Headers          map[string]string
-	Mobile           bool
-	MaxPages         int
-	WaitStrategy     string            // Playwright wait strategy: "commit", "load", "domcontentloaded", "networkidle"
-	ExtraWaitTime    time.Duration     // Additional wait after page load
-	JSCrawl          bool              // Extract endpoints from JavaScript content
-	ExportFormat     string            // Structured output format: jsonl, csv, sitemap
-	ExportFile       string            // Export output file path (empty = stdout)
-	Resume           bool              // Resume a previous crawl session
-	NoRobots         bool              // Skip robots.txt/sitemap seeding
-	SeedURLs         []string          // Pre-seed URLs from sitemap/robots.txt
-	ExtractSelectors map[string]string // CSS selectors for field extraction
-	Quiet            bool              // Pipeline mode: suppress all output except export
+	StartURL             string
+	StartURLs            []string // All seed URLs (includes StartURL); used for multi-URL crawling
+	OutputDir            string
+	CacheDir             string // Directory for cache files
+	MaxDepth             int
+	Concurrency          int
+	DefaultDelay         time.Duration
+	MaxRetries           int
+	Force                bool
+	DomainDelays         map[string]time.Duration
+	ExcludePatterns      []string
+	UserAgent            string
+	MobileUserAgent      string
+	Headers              map[string]string
+	Mobile               bool
+	MaxPages             int
+	WaitStrategy         string            // Playwright wait strategy: "commit", "load", "domcontentloaded", "networkidle"
+	ExtraWaitTime        time.Duration     // Additional wait after page load
+	EngineTimeoutSeconds int               // katana engine window: min seconds a crawl runs before natural end (queue-empty floor)
+	JSCrawl              bool              // Extract endpoints from JavaScript content
+	ExportFormat         string            // Structured output format: jsonl, csv, sitemap
+	ExportFile           string            // Export output file path (empty = stdout)
+	Resume               bool              // Resume a previous crawl session
+	NoRobots             bool              // Skip robots.txt/sitemap seeding
+	SeedURLs             []string          // Pre-seed URLs from sitemap/robots.txt
+	ExtractSelectors     map[string]string // CSS selectors for field extraction
+	Quiet                bool              // Pipeline mode: suppress all output except export
 }
 
 // LoadConfigWithViper loads configuration using the new Viper-based system

@@ -34,6 +34,7 @@ headers:
   # Authorization: "Bearer your-token-here"
   # X-Custom-Header: "value"
 
-# Advanced Playwright options (forces browser mode)
-# waitStrategy: "networkidle"  # Wait for network idle
-# extraWaitTime: 1000         # Additional milliseconds to wait
+# Advanced engine options
+# waitStrategy: "networkidle"  # Wait for network idle (non-default selects the headless engine)
+# extraWaitTime: 1000         # Additional milliseconds to wait (>500ms selects headless)
+# engineTimeoutSeconds: 10    # Minimum seconds the engine keeps its queue alive

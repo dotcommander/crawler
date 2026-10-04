@@ -56,6 +56,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ignorePatterns", []string{})
 	v.SetDefault("waitStrategy", "networkidle")
 	v.SetDefault("extraWaitTime", "500ms")
+	// katana engine window in seconds: a crawl ends when the queue has
+	// been empty past this window, so it floors small crawls' runtime.
+	v.SetDefault("engineTimeoutSeconds", 10)
 }
 
 // getXDGConfigDir returns the XDG-compliant config directory
@@ -142,23 +145,24 @@ func (vcm *ViperConfigManager) BuildCrawlerConfig(startURL, outputDir string, mo
 	}
 
 	config := &CrawlerConfig{
-		StartURL:        startURL,
-		OutputDir:       absOutputDir,
-		CacheDir:        GetCacheDir(),
-		MaxDepth:        vcm.v.GetInt("depth"),
-		Concurrency:     vcm.v.GetInt("concurrency"),
-		DefaultDelay:    time.Duration(vcm.v.GetFloat64("delay") * float64(time.Second)),
-		MaxRetries:      vcm.v.GetInt("maxRetries"),
-		Force:           vcm.v.GetBool("force"),
-		DomainDelays:    domainDelays,
-		ExcludePatterns: vcm.v.GetStringSlice("ignorePatterns"),
-		UserAgent:       vcm.v.GetString("userAgent"),
-		MobileUserAgent: vcm.v.GetString("mobileUserAgent"),
-		Headers:         vcm.v.GetStringMapString("headers"),
-		Mobile:          vcm.v.GetBool("mobile"),
-		MaxPages:        vcm.v.GetInt("maxPages"),
-		WaitStrategy:    vcm.v.GetString("waitStrategy"),
-		ExtraWaitTime:   extraWaitTime,
+		StartURL:             startURL,
+		OutputDir:            absOutputDir,
+		CacheDir:             GetCacheDir(),
+		MaxDepth:             vcm.v.GetInt("depth"),
+		Concurrency:          vcm.v.GetInt("concurrency"),
+		DefaultDelay:         time.Duration(vcm.v.GetFloat64("delay") * float64(time.Second)),
+		MaxRetries:           vcm.v.GetInt("maxRetries"),
+		Force:                vcm.v.GetBool("force"),
+		DomainDelays:         domainDelays,
+		ExcludePatterns:      vcm.v.GetStringSlice("ignorePatterns"),
+		UserAgent:            vcm.v.GetString("userAgent"),
+		MobileUserAgent:      vcm.v.GetString("mobileUserAgent"),
+		Headers:              vcm.v.GetStringMapString("headers"),
+		Mobile:               vcm.v.GetBool("mobile"),
+		MaxPages:             vcm.v.GetInt("maxPages"),
+		WaitStrategy:         vcm.v.GetString("waitStrategy"),
+		ExtraWaitTime:        extraWaitTime,
+		EngineTimeoutSeconds: vcm.v.GetInt("engineTimeoutSeconds"),
 	}
 
 	return config, nil

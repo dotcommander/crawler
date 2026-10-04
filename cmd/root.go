@@ -30,7 +30,7 @@ type commandTree struct {
 	Verbose      bool             `short:"v" help:"Show detailed progress" xor:"output-mode"`
 	Quiet        bool             `short:"q" help:"Pipeline mode: JSONL to stdout, no UI" xor:"output-mode"`
 	OutputDir    string           `name:"output" short:"o" help:"Save files to directory"`
-	MaxPages     int              `name:"max-pages" short:"p" help:"Stop after N pages (0=unlimited)"`
+	MaxPages     int              `name:"max-pages" short:"p" help:"Stop after N pages, best effort (0=unlimited)"`
 	Mobile       bool             `short:"m" help:"Crawl as mobile device"`
 	ConfigFile   string           `name:"config" short:"c" help:"Use config file"`
 	Profile      string           `help:"Use preset: fast, safe, or thorough"`
@@ -46,10 +46,10 @@ type commandTree struct {
 }
 
 func Execute() error {
-	return execute(context.Background(), os.Args[1:], os.Stderr)
+	return execute(context.Background(), os.Args[1:], os.Stdout, os.Stderr)
 }
 
-func execute(ctx context.Context, args []string, stderr io.Writer) error {
+func execute(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "serve" {
 		serve, err := parseServeCommand(args[1:], stderr)
 		if err != nil {
@@ -57,20 +57,20 @@ func execute(ctx context.Context, args []string, stderr io.Writer) error {
 		}
 		return serve.Run(ctx, stderr)
 	}
-	tree, err := parseCommand(args, stderr)
+	tree, err := parseCommand(args, stdout, stderr)
 	if err != nil {
 		return err
 	}
 	return run(ctx, tree, stderr)
 }
 
-func parseCommand(args []string, stderr io.Writer) (*commandTree, error) {
+func parseCommand(args []string, stdout, stderr io.Writer) (*commandTree, error) {
 	var tree commandTree
 	parser, err := kong.New(&tree,
 		kong.Name("crawler"),
 		kong.Description("Fast and smart web crawler with JavaScript support. Use `crawler serve [directory]` to browse captured content."),
 		kong.Vars{"version": version},
-		kong.Writers(stderr, stderr),
+		kong.Writers(stdout, stderr),
 		kong.ConfigureHelp(kong.HelpOptions{
 			Compact:   true,
 			Tree:      true,
@@ -155,16 +155,17 @@ func run(ctx context.Context, opts *commandTree, stderr io.Writer) error {
 	// Set up logging
 	setupLogging(opts.Verbose, opts.Quiet)
 
-	// Pre-seed from robots.txt and sitemaps
-	var robotsChecker func(path, userAgent string) bool
+	// Pre-seed from robots.txt and sitemaps; one robots.txt fetch is
+	// shared between discovery enforcement and seeding.
+	var robotsResult *seeders.RobotsResult
 	if !crawlerConfig.NoRobots {
 		if robots, robotsErr := seeders.FetchRobotsTxt(ctx, crawlerConfig.StartURL, opts.Verbose); robotsErr == nil && robots != nil {
-			robotsChecker = robots.IsAllowed
+			robotsResult = robots
 		} else if robotsErr != nil && opts.Verbose {
 			log.Printf("[WARN] robots.txt fetch for discovery enforcement failed: %v", robotsErr)
 		}
 
-		seedResult, seedErr := seeders.Seed(ctx, crawlerConfig.StartURL, crawlerConfig.UserAgent, crawlerConfig.ExcludePatterns, opts.Verbose)
+		seedResult, seedErr := seeders.Seed(ctx, crawlerConfig.StartURL, crawlerConfig.UserAgent, crawlerConfig.ExcludePatterns, robotsResult, opts.Verbose)
 		if seedErr != nil {
 			log.Printf("[WARN] Seeding failed: %v", seedErr)
 		} else if len(seedResult.URLs) > 0 {
@@ -182,13 +183,13 @@ func run(ctx context.Context, opts *commandTree, stderr io.Writer) error {
 	sqliteStore, storeErr := session.NewSQLiteStore(sessionsDir, startURL, opts.Resume)
 	if storeErr != nil {
 		log.Printf("Warning: failed to create session store, using in-memory: %v", storeErr)
-		store = nil // NewEngineCrawler falls back to MemoryStore
+		store = nil // NewKatanaCrawler falls back to MemoryStore
 	} else {
 		store = sqliteStore
 	}
 
-	// Create crawler instance (auto-detect engine)
-	crawler, err := crawlers.CreateCrawler(crawlerConfig, opts.Verbose, "", store)
+	// Create crawler instance (katana engine; browser engine selected automatically for mobile/wait strategies)
+	crawler, err := crawlers.CreateCrawler(crawlerConfig, opts.Verbose, store)
 	if err != nil {
 		if store != nil {
 			store.Close()
@@ -197,8 +198,8 @@ func run(ctx context.Context, opts *commandTree, stderr io.Writer) error {
 	}
 
 	// Enforce robots.txt on links discovered mid-crawl, not just seeds.
-	if robotsChecker != nil {
-		setRobotsCheckerOnCrawler(crawler, robotsChecker)
+	if robotsResult != nil {
+		setRobotsResultOnCrawler(crawler, robotsResult)
 	}
 
 	// Set up exporter if format is specified
@@ -259,7 +260,7 @@ func setupExporter(format, filePath string, extractedKeys []string) (exporters.E
 	return exp, cleanup, nil
 }
 
-// setExporterOnCrawler sets the exporter on the underlying EngineCrawler.
+// setExporterOnCrawler sets the exporter on the underlying crawler.
 func setExporterOnCrawler(c api.Crawler, exp exporters.Exporter) {
 	type exporterSetter interface {
 		SetExporter(exporters.Exporter)
@@ -280,15 +281,15 @@ func setExporterOnCrawler(c api.Crawler, exp exporters.Exporter) {
 	}
 }
 
-// setRobotsCheckerOnCrawler installs the robots.txt discovery-time allow
-// predicate on the underlying EngineCrawler, mirroring setExporterOnCrawler.
-func setRobotsCheckerOnCrawler(c api.Crawler, fn func(path, userAgent string) bool) {
+// setRobotsResultOnCrawler installs the fetched robots.txt result on
+// the underlying crawler, mirroring setExporterOnCrawler.
+func setRobotsResultOnCrawler(c api.Crawler, res *seeders.RobotsResult) {
 	type robotsSetter interface {
-		SetRobotsChecker(func(path, userAgent string) bool)
+		SetRobotsResult(*seeders.RobotsResult)
 	}
 
 	if rs, ok := c.(robotsSetter); ok {
-		rs.SetRobotsChecker(fn)
+		rs.SetRobotsResult(res)
 		return
 	}
 
@@ -297,7 +298,7 @@ func setRobotsCheckerOnCrawler(c api.Crawler, fn func(path, userAgent string) bo
 	}
 	if cw, ok := c.(crawlerWithInner); ok {
 		if rs, ok := cw.GetInnerCrawler().(robotsSetter); ok {
-			rs.SetRobotsChecker(fn)
+			rs.SetRobotsResult(res)
 		}
 	}
 }

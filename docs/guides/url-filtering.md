@@ -22,13 +22,18 @@ The crawler **only follows links on the same domain** as the start URL.
 
 #### Implementation
 
-Location: `internal/crawlers/engine_crawler.go:356-359`
+Location: `internal/katanaengine/translate.go` (`ScopeRegexes`)
+
+Same-domain and base-path confinement is translated into a katana scope
+regex anchored on each seed's scheme, host, and base directory (mirroring
+`internal/utils/url.go`'s `IsWithinBasePath`). URLs outside the anchor are
+never enqueued by the engine.
 
 ```go
-// Skip external domains (different host than start URL)
-if u.Host != "" && u.Host != startURL.Host {
-    return true
-}
+// Whole-host seed: the anchor matches any path on the seed's host only
+alt = regexp.QuoteMeta(u.Scheme+"://"+u.Host) + "(?:/|$)"
+// Base-directory seed: only URLs under the seed's directory match
+alt = regexp.QuoteMeta(u.Scheme + "://" + u.Host + baseDir)
 ```
 
 #### Examples
@@ -622,7 +627,7 @@ echo "https://example.com/docs/api.html" | awk -F/ '{print "/" $2 "/" $3}'
 
 ## References
 
-- **URL Filtering Implementation**: `internal/crawlers/engine_crawler.go:338-371`
+- **Scope Translation (same-domain + base path)**: `internal/katanaengine/translate.go`
 - **Path Validation**: `internal/utils/url.go:141-164`
 - **Pattern Matching**: `internal/utils/url.go:251-264`
 - **Normalization**: `internal/utils/url.go:266-284`

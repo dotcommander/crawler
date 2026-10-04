@@ -69,7 +69,7 @@ Cleans up all resources associated with the crawler.
 
 - Cancels the internal context if not already cancelled
 - Closes the underlying crawl engine (e.g., shuts down browser
-  instances for Playwright)
+  instances for the headless engine)
 - Should be called as a deferred function or after `Cancel()` to
   ensure proper cleanup
 
@@ -98,7 +98,7 @@ func main() {
     }
 
     // Create crawler (uses factory for proper initialization)
-    crawler, err := crawlers.CreateCrawler(cfg, true, "colly")
+    crawler, err := crawlers.CreateCrawler(cfg, verbose, store)
     if err != nil {
         log.Fatalf("Failed to create crawler: %v", err)
     }
@@ -143,5 +143,5 @@ crawler.Close()
 - Use `crawlers.CreateCrawler()` factory function for proper instantiation
 - Always call `Close()` as a deferred function to prevent resource leaks
 - `Cancel()` is optional if you let the crawl complete naturally
-- The factory automatically selects the appropriate engine (Colly or
-  Playwright) based on configuration
+- The factory constructs the katana-backed crawler, selecting the standard
+  (HTTP) or headless engine mode based on configuration
