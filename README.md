@@ -26,9 +26,15 @@ Chromium when you ask for mobile rendering or custom page-wait behavior.
 
 ## Quick start
 
-Prerequisite: Go 1.26 or later (`go.mod` pins the module to 1.26). Build from
-source — `go install github.com/dotcommander/crawler@latest` fetches the last
-tagged release, which predates the katana engine.
+Prerequisite: Go 1.26 or later (`go.mod` pins the module to 1.26). Install
+the latest tagged release (`v0.2.0`, katana engine):
+
+```bash
+go install github.com/dotcommander/crawler@latest   # -> $(go env GOPATH)/bin/crawler
+crawler --max-pages 5 https://example.com
+```
+
+Or build from source (development):
 
 ```bash
 git clone https://github.com/dotcommander/crawler.git
