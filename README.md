@@ -5,212 +5,244 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/dotcommander/crawler.svg)](https://pkg.go.dev/github.com/dotcommander/crawler)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dotcommander/crawler)](https://goreportcard.com/report/github.com/dotcommander/crawler)
 
-A high-performance web crawler in Go built on
-[projectdiscovery/katana](https://github.com/projectdiscovery/katana) used as an
-embedded engine: plain HTTP for static content, with an automatic switch to a
-headless Chromium for JavaScript-heavy or mobile-emulated sites.
+Crawler walks one website at a time: it seeds from `robots.txt` and sitemaps,
+fetches only URLs under the seed's domain and base path, saves every fetched
+body under `~/.config/crawler/storage/<host>/`, and can stream each page as a
+JSONL or CSV record. The fetching engine is
+[projectdiscovery/katana](https://github.com/projectdiscovery/katana) v1.7.0,
+embedded as a Go library — plain HTTP by default, switching to headless
+Chromium when you ask for mobile rendering or custom page-wait behavior.
 
-## Features
+## Contents
 
-- **Katana engine, auto-selected mode** — katana's standard (HTTP) engine by
-  default; its headless Chromium engine when you request `--mobile`, a custom
-  `waitStrategy`, or an `extraWaitTime > 500ms`.
-- **Scope-safe crawling** — stays within the seed's domain and base path; honours
-  `robots.txt` and sitemap discovery by default (`--no-robots` to opt out).
-- **Polite by construction** — per-domain rate limiting via delay groups,
-  semaphore-bounded workers, and bounded response bodies.
-- **Resumable** — visited-URL state persists to SQLite under
-  `~/.config/crawler/sessions/`; re-run with `--resume` to continue. Resume
-  re-traverses from the seed: already-completed pages are re-fetched but
-  deduplicated from exports and saved files (the engine's queue state is not
-  persisted).
-- **Structured export** — `--format jsonl|csv|sitemap` with `--extract` CSS
-  selectors (e.g. `title=h1,desc=.summary`) emitted as columns/fields.
-- **JavaScript endpoint mining** — `--jc` extracts API endpoints from inline and
-  external `<script>` sources.
-- **Resilient shutdown** — cancellation and signals drain workers before the
-  engine is torn down; press <kbd>q</kbd> (TUI) or <kbd>Ctrl-C</kbd> to stop.
-- **Three UI modes** — enhanced Bubbletea TUI by default; `--verbose` for plain
-  log output (CI/pipes); `--quiet` for JSONL-to-stdout pipeline mode.
+| Section | What you get |
+|---|---|
+| [Quick start](#quick-start) | Build, first crawl, where the files land |
+| [Configuration and state](#configuration-and-state) | `crawl.yml` keys, presets, env vars, directories |
+| [Non-goals](#non-goals) | What this tool deliberately does not do |
+| [Capabilities](#capabilities) | Scope, robots, exports, extraction, resume, serve, library use |
+| [Verify and contribute](#verify-and-contribute) | Build, test, lint, PRs |
+| [Limits](#limits) | Known deviations and failure modes |
 
-## Requirements
+## Quick start
 
-- Go 1.26 or later.
-- For headless crawls: a Chromium is launched on demand (managed by katana's
-  headless engine).
-
-## Install
-
-```bash
-go install github.com/dotcommander/crawler@latest
-```
-
-Or build from source:
+Prerequisite: Go 1.26 or later (`go.mod` pins the module to 1.26). Build from
+source — `go install github.com/dotcommander/crawler@latest` fetches the last
+tagged release, which predates the katana engine.
 
 ```bash
 git clone https://github.com/dotcommander/crawler.git
 cd crawler
 go build -o crawler .
+./crawler --max-pages 5 https://example.com
 ```
 
-## Quick start
+Expected observable result: live progress in the terminal (a Bubbletea TUI on
+a real terminal; plain log lines when stdout is a pipe, as in CI), then
 
 ```bash
-# Crawl with smart defaults (katana HTTP engine, in-scope)
-crawler https://example.com
-
-# Cap a large site
-crawler --max-pages 50 https://docs.example.com
-
-# Mobile rendering (auto-selects the headless engine)
-crawler --mobile https://m.example.com
-
-# Pipeline mode: JSONL records to stdout, no UI
-crawler --quiet --format jsonl https://example.com > pages.jsonl
-
-# Resume an interrupted crawl
-crawler --resume https://example.com
+ls ~/.config/crawler/storage/example.com/
+# index.html  ...plus every in-scope page linked from it
 ```
 
-## Command reference
+Mechanism, in crawl order:
 
+1. The seed URL is validated (http/https only) and becomes the crawl scope
+   anchor: same host **and** same base path.
+2. `https://<host>/robots.txt` is fetched once; its `Sitemap:` lines are
+   followed and every sitemap URL inside scope is pre-seeded. If `robots.txt`
+   is missing or unparseable, the crawl simply proceeds.
+3. katana fetches pages — 5 workers, 1 s default delay, depth 3 by default —
+   and each fetched body is saved as
+   `~/.config/crawler/storage/<host>/<path>` (extension-less paths get
+   `index.html`; query strings and fragments are dropped).
+4. A finished crawl lingers up to `engineTimeoutSeconds` (default 10) waiting
+   for the queue to stay empty before exiting — a small crawl still holds the
+   terminal for those seconds; that floor, not a hang, is what you are seeing.
+
+Next safe variation — pipeline mode, no UI, one JSON record per page on
+stdout:
+
+```bash
+./crawler --quiet --max-pages 5 https://example.com | head -2
 ```
-crawler [options] <URL>
-crawler serve [directory]   # browse captured content
-```
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--output` | `-o` | Directory to save crawled content |
-| `--max-pages` | `-p` | Stop after N pages, best effort (`0` = unlimited; in-flight requests may slightly overshoot) |
-| `--mobile` | `-m` | Crawl as a mobile device (selects headless) |
-| `--config` | `-c` | Path to a YAML config file |
-| `--profile` | | Preset: `fast`, `safe`, or `thorough` |
-| `--url-list` | | File of newline-delimited seed URLs |
-| `--format` | | Export format: `jsonl`, `csv`, `sitemap` |
-| `--export-file` | | Export output file (default: stdout) |
-| `--extract` | | CSS selectors as `key=selector,...` |
-| `--jc` | | Extract API endpoints from JavaScript |
-| `--resume` | | Resume from the persisted session |
-| `--no-robots` | | Skip robots.txt / sitemap seeding |
-| `--verbose` | `-v` | Plain progress logging (no TUI) |
-| `--quiet` | `-q` | Pipeline mode: JSONL to stdout, no UI |
-| `--version` | | Print version and exit |
+Press <kbd>q</kbd> or <kbd>Ctrl-C</kbd> to stop a crawl; workers drain for up
+to 5 s before shutdown completes.
 
-There is intentionally no `--engine` flag: the engine is auto-selected from the
-options above. Engine choice is deterministic — see *Architecture*.
+## Configuration and state
 
-## Configuration
+Configuration comes from CLI flags (see `crawler --help`), then a YAML file,
+then built-in defaults. The file is named `crawl.yml` (see
+[`crawl.yml.example`](crawl.yml.example)); discovery order: `--config` flag,
+`$CRAWLER_CONFIG`, `./crawl.yml`, then the OS config dir
+(`~/Library/Application Support/crawler/` on macOS, `~/.config/crawler/` on
+Linux, `%APPDATA%\crawler\` on Windows).
 
-The crawler reads `crawl.yml` (see [`crawl.yml.example`](crawl.yml.example) for
-the full reference), searching in order: `$CRAWLER_CONFIG`, `./crawl.yml`, then
-the OS config dir (`~/Library/Application Support/crawler/` on macOS,
-`~/.config/crawler/` on Linux, `%APPDATA%\crawler\` on Windows). CLI flags
-override config values.
+Any key below can also be set through an environment variable with a
+`CRAWLER_` prefix, e.g. `CRAWLER_CONCURRENCY=10`.
 
-Common fields: `depth`, `concurrency` (default 5), `delay`, `maxRetries`,
-`mobile`, `extraWaitTime`, `waitStrategy`, `domainDelays` (per-domain rate
-limits), `excludePatterns`, `headers`, and `userAgent`.
+| Key | Default | Meaning |
+|---|---|---|
+| `depth` | `3` | Link hops to follow from the seed |
+| `concurrency` | `5` | Parallel workers |
+| `delay` | `1.0` | Seconds between requests |
+| `maxRetries` | `2` | Retries per failed request |
+| `maxPages` | `0` | Stop after N pages, best effort (0 = unlimited) |
+| `mobile` | `false` | Mobile emulation (selects headless engine) |
+| `userAgent` / `mobileUserAgent` | built-in | Override the sent UA |
+| `headers` | `{}` | Extra HTTP headers |
+| `domainDelays` | `{}` | Per-domain delay overrides, e.g. `api.github.com: 2.0` |
+| `ignorePatterns` | `[]` | Regexes; matching URLs are never fetched |
+| `waitStrategy` | `networkidle` | `commit`, `load`, `domcontentloaded`, `networkidle`; a non-default value selects the headless engine |
+| `extraWaitTime` | `500ms` | Extra wait after load; >500 ms selects the headless engine |
+| `engineTimeoutSeconds` | `10` | Minimum seconds the queue must stay empty before the crawl ends |
+| `force` | `false` | Overwrite existing saved files |
 
-### Presets
+`--profile` applies a preset before flags:
 
-`--profile` selects a tuned preset:
+| Profile | Delay | Workers | Depth | Wait strategy | Use case |
+|---|---|---|---|---|---|
+| `fast` | 0.5 s | 10 | 2 | `domcontentloaded` | Robust sites, quick scan |
+| `safe` | 2.0 s | 3 | 5 | `networkidle` | Fragile or legacy sites |
+| `thorough` | 3.0 s | 2 | 10 | `networkidle` | Deep documentation crawl |
 
-| Profile | Workers | Delay | Depth | Use case |
-|---------|---------|-------|-------|----------|
-| `fast` | 10 | 0.5s | 2 | Robust sites, quick scan |
-| `safe` | 2 | 2.0s | 3 | Fragile or legacy sites |
-| `thorough` | 5 | 1.0s | 5 | Deep documentation crawl |
-
-### Files and environment
+Files and directories:
 
 | What | Default | Override |
-|------|---------|----------|
-| Crawled content | `~/.config/crawler/storage/<host>/` | `--output`, `CRAWLER_OUTPUT_DIR` |
-| Cache | OS cache dir (e.g. `~/Library/Caches/crawler`, `~/.cache/crawler`) | `CRAWLER_CACHE_DIR` |
-| Config file | `crawl.yml` (search order above) | `CRAWLER_CONFIG` |
-| Resume sessions | `~/.config/crawler/sessions/` | `CRAWLER_SESSIONS_DIR` |
+|---|---|---|
+| Crawled content | `~/.config/crawler/storage/` | `--output`, `CRAWLER_OUTPUT_DIR` |
+| Resume sessions (SQLite) | `~/.config/crawler/sessions/` | `CRAWLER_SESSIONS_DIR` |
+| Cache | `~/Library/Caches/crawler` (macOS), `~/.cache/crawler` (Linux) | `CRAWLER_CACHE_DIR` |
+| Config file | discovery order above | `--config`, `CRAWLER_CONFIG` |
 
-If the TUI renders garbled (SSH, CI, piped output), use `--verbose` for plain
-log output or `--quiet` for JSONL.
+(Windows uses `%APPDATA%\crawler\` for config and sessions and
+`%LOCALAPPDATA%\crawler\cache` for cache.)
 
-## Architecture
+## Non-goals
 
-### Engine selection
+- **No cross-site crawling.** Links outside the seed host and base path are
+  filtered out; this is a single-site tool, not a harvester.
+- **No engine flag.** There is intentionally no `--engine`; the mode is
+  derived deterministically from `mobile`, `waitStrategy`, and
+  `extraWaitTime`.
+- **No JavaScript execution in plain mode.** The default engine is HTTP-only;
+  JS runs only when the headless engine is selected (which needs a local
+  Chromium/Chrome for katana's headless mode).
+- **Not distributed.** One process, one SQLite session per host.
 
-Crawling is powered by [katana](https://github.com/projectdiscovery/katana)
-(v1.7.0, used as a Go library via `internal/katanaengine`):
+## Capabilities
 
-| Option | Mode | Why |
-|--------|------|-----|
-| (default) | **katana standard** | Fast HTTP; no JavaScript |
-| `--mobile` | **katana headless** | Device emulation needs a browser |
-| `waitStrategy` ≠ `networkidle` | **katana headless** | Custom load timing |
-| `extraWaitTime > 500ms` | **katana headless** | Indicates a JS-heavy page |
+### Scope and politeness
 
-The former Colly/Rod/Playwright engines and the in-house orchestration core
-were removed once the katana adapter reached parity (queueing, scope control,
-robots translation, and pacing are now katana's, adapted through
-`internal/katanaengine`).
+Scope is the seed's host plus base path — a crawl of
+`https://docs.example.com/go/` never fetches `https://docs.example.com/blog`
+or `https://cdn.example.com`. Response bodies are size-capped (50 MB per page
+via katana's `BodyReadSize`; `robots.txt` reads cap at 512 KB), `delay` spaces
+requests, and `domainDelays` raises the delay for specific hosts. Depth
+defaults to 3; `--max-pages`/`-p` stops a crawl early on a best-effort basis
+(in-flight requests may overshoot slightly).
 
-### Layout
+### Robots and sitemap seeding
 
-```
-api/                     Public Crawler interface
-cmd/                     Kong CLI (root, serve) and config helpers
-internal/
-  config/                Viper-based config + defaults
-  crawlers/              Crawler orchestration on the katana engine,
-                         export records, content saving, extraction
-  exporters/             jsonl / csv / sitemap writers
-  katanaengine/          CrawlerConfig → katana Options translation,
-                         engine adapter, delay-group runner
-  seeders/               robots.txt + sitemap discovery
-  session/               Visited store (SQLite / memory) for resume
-  utils/                 URL normalization, validation, path safety
-ui/                      Bubbletea TUI (enhanced / standard / simple)
-```
+On by default: `robots.txt` is fetched at the host root, disallowed paths are
+excluded, and `Sitemap:` entries are parsed and seeded (URLs outside scope are
+filtered). `--no-robots` skips all of it. Compliance is enforced at both
+discovery and result level — a link that becomes disallowed mid-crawl is still
+dropped.
 
-### Safety and resilience
+### Exports and extraction
 
-- **Scope** — links are followed only within the seed domain and base path; URLs
-  are validated (scheme, traversal, encoded traversal).
-- **Backpressure** — discovered links that overflow the bounded queue are counted
-  and logged rather than dropped silently.
-- **Bounded I/O** — HTTP/JS/PDF/sitemap bodies are read through `io.LimitReader`.
-- **Shutdown** — `Cancel`/signals drain workers (bounded wait) before the engine
-  and visited store are closed.
+`--format jsonl|csv|sitemap` with `--export-file` (sitemap **requires**
+`--export-file`; otherwise it fails with `Error: failed to set up exporter:
+sitemap format requires --export-file`). Without `--export-file`, records go
+to stdout. `--quiet` implies `--format jsonl` and silences the UI, for
+pipelines.
 
-## Development
+JSONL record keys (runtime-verified):
+`url`, `title`, `status_code`, `content_type`, `links_found`, `crawled_at`,
+plus `extracted` when `--extract` is used. CSV uses the same columns as its
+header. `--extract` takes CSS selectors as `key=selector,...`:
 
 ```bash
-go build ./...          # build
-go test ./...           # tests
-go vet ./...            # vet
-golangci-lint run ./... # lint (config in .golangci.yml)
+./crawler --quiet --format csv --extract "title=h1,desc=.summary" \
+  --export-file pages.csv https://example.com
 ```
 
-A [`Taskfile.yml`](Taskfile.yml) wraps common tasks (`task build`, `task test`,
-`task install`). Run `task --list` to see them all.
+### JavaScript endpoint mining
 
-### Known limitations
+`--jc` scans inline and external `<script>` sources of fetched pages for
+URL-like endpoints; discovered endpoints inside scope are fetched like any
+other page (verified: an API path referenced only in JavaScript is reached
+with `--jc` and not without it).
 
-- Under extreme bursts of discovered links (far exceeding `concurrency * 100`),
-  overflow links are counted and logged but not retried.
-- Browser-engine page operations do not abort the instant the context is
-  cancelled; graceful shutdown waits up to ~10s for in-flight pages.
+### Sessions and resume
 
-## Contributing
+Each crawl records visited URLs in a SQLite database under the sessions dir
+(keyed by host). `--resume` continues a previous crawl of the same seed:
+already-completed pages are re-fetched (the engine queue is not persisted)
+but never re-exported or re-saved — a page is processed at most once across
+runs.
 
-Pull requests welcome. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md). Please
-run `go test ./...` and `golangci-lint run` before submitting, and use
-[Conventional Commits](https://www.conventionalcommits.org/) messages.
+### Serving captured content
 
-## Security
+```bash
+crawler serve [directory]        # browse captured content
+crawler serve --port 9000 .      # default: localhost:8080
+```
 
-Found a vulnerability? See [`docs/SECURITY.md`](docs/SECURITY.md) for private
-reporting. Community standards are in
+Serves stored files for browsing (directory listing + file contents); path
+traversal out of the served directory is blocked.
+
+### Engine modes
+
+| Options | Engine | Why |
+|---|---|---|
+| (default) | katana standard | Fast plain HTTP; no JavaScript |
+| `--mobile` | katana headless | Device emulation needs a browser |
+| `waitStrategy` ≠ `networkidle` | katana headless | Custom load timing |
+| `extraWaitTime` > 500 ms | katana headless | Indicates a JS-heavy page |
+
+### Library use
+
+The module path is `github.com/dotcommander/crawler`; `api.Crawler` is the
+public interface and `crawlers.CreateCrawler(cfg, verbose, store)` the
+factory. See [`docs/api/crawler.md`](docs/api/crawler.md) for a worked
+example.
+
+## Verify and contribute
+
+```bash
+go build ./...            # build everything
+go test ./...             # full test suite
+go vet ./...              # vet
+golangci-lint run ./...   # lint (config in .golangci.yml)
+go test ./cmd/ -run TestE2E   # end-to-end tests (local HTTP servers, ~15 s)
+```
+
+A [`Taskfile.yml`](Taskfile.yml) wraps the common ones (`task build`,
+`task test`, `task install`).
+
+Pull requests welcome — see [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
+Run the test suite and linter before submitting, and use Conventional
+Commits-style messages. Vulnerability reports go to
+[`docs/SECURITY.md`](docs/SECURITY.md); the code of conduct is
 [`docs/CODE_OF_CONDUCT.md`](docs/CODE_OF_CONDUCT.md).
+
+## Limits
+
+- **`links_found` is always `0`** in exported records — a known deviation of
+  the katana adapter, kept for schema compatibility.
+- **`--max-pages` is best effort.** Enforcement happens when results arrive,
+  so up to `concurrency`−1 in-flight fetches can land beyond the limit.
+- **Resume re-traverses the network.** Completed pages are deduplicated from
+  output, but their bytes are fetched again; pages discovered but not yet
+  fetched when a run stopped are reached by re-walking from the seed.
+- **Every crawl pays the `engineTimeoutSeconds` tail** (default 10 s) before
+  the process exits, even for a 1-page crawl. Lower it in `crawl.yml` for
+  short scripted runs.
+- **Headless mode needs a Chromium/Chrome** available to katana's headless
+  engine; without one, `--mobile` and custom wait strategies cannot run.
 
 ## License
 

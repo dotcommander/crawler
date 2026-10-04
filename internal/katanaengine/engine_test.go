@@ -91,14 +91,14 @@ func newTestSite(t *testing.T, robotsBody string, pages map[string]string) *test
 	})
 	var links strings.Builder
 	for p := range pages {
-		links.WriteString(fmt.Sprintf(`<a href="%s">%s</a>`, p, p))
+		fmt.Fprintf(&links, `<a href="%s">%s</a>`, p, p)
 	}
 	for p := range pages {
 		p := p
 		mux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
 			site.count(p)
 			w.Header().Set("Content-Type", "text/html")
-			_, _ = w.Write([]byte(fmt.Sprintf(`<html><head><title>%s</title></head><body>%s</body></html>`, p, links.String())))
+			_, _ = fmt.Fprintf(w, `<html><head><title>%s</title></head><body>%s</body></html>`, p, links.String())
 		})
 	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +108,7 @@ func newTestSite(t *testing.T, robotsBody string, pages map[string]string) *test
 		}
 		site.count("/")
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(fmt.Sprintf(`<html><head><title>root</title></head><body>%s</body></html>`, links.String())))
+		_, _ = fmt.Fprintf(w, `<html><head><title>root</title></head><body>%s</body></html>`, links.String())
 	})
 	site.Server = httptest.NewServer(mux)
 	t.Cleanup(site.Close)
